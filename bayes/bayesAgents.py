@@ -97,7 +97,7 @@ def constructBayesNet(gameState):
     variableDomainsDict = {}
 
     "*** YOUR CODE HERE ***"
-    
+
     # observation variables
     for housePos in gameState.getPossibleHouses():
         for obsPos in gameState.getHouseWalls(housePos):
@@ -233,7 +233,24 @@ def getMostLikelyFoodHousePosition(evidence, bayesNet, eliminationOrder):
     (This should be a very short method.)
     """
     "*** YOUR CODE HERE ***"
-    util.raiseNotDefined()
+    # perform inference by variable elimination
+    foodHouseFactor = inferenceByVariableElimination(
+        bayesNet,
+        [FOOD_HOUSE_VAR],  # query: food house
+        evidence,
+        eliminationOrder
+    )
+    
+    # find the assignment with the maximum probability
+    maxProb = -1
+    bestAssignment = None
+    for assignment in foodHouseFactor.getAllPossibleAssignmentDicts():
+        prob = foodHouseFactor.getProbability(assignment)
+        if prob > maxProb:
+            maxProb = prob
+            bestAssignment = assignment
+    
+    return bestAssignment
 
 
 class BayesAgent(game.Agent):
