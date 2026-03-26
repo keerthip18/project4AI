@@ -153,10 +153,16 @@ def fillYCPT(bayesNet, gameState):
     You can use the PROB_* constants imported from layout rather than writing
     probabilities down by hand.
     """
+    "*** YOUR CODE HERE ***"
+    from layout import PROB_BOTH_TOP, PROB_BOTH_BOTTOM, PROB_ONLY_LEFT_TOP, PROB_ONLY_LEFT_BOTTOM
 
     yFactor = bn.Factor([Y_POS_VAR], [], bayesNet.variableDomainsDict())
-    "*** YOUR CODE HERE ***"
-    util.raiseNotDefined()
+    
+    yFactor.setProbability({Y_POS_VAR: BOTH_TOP_VAL}, PROB_BOTH_TOP)
+    yFactor.setProbability({Y_POS_VAR: BOTH_BOTTOM_VAL}, PROB_BOTH_BOTTOM)
+    yFactor.setProbability({Y_POS_VAR: LEFT_TOP_VAL}, PROB_ONLY_LEFT_TOP)
+    yFactor.setProbability({Y_POS_VAR: LEFT_BOTTOM_VAL}, PROB_ONLY_LEFT_BOTTOM)
+    
     bayesNet.setCPT(Y_POS_VAR, yFactor)
 
 def fillHouseCPT(bayesNet, gameState):
@@ -218,10 +224,49 @@ def fillObsCPT(bayesNet, gameState):
     house and ghost house are assigned to the same cell.
     """
 
-    bottomLeftPos, topLeftPos, bottomRightPos, topRightPos = gameState.getPossibleHouses()
+    #bottomLeftPos, topLeftPos, bottomRightPos, topRightPos = gameState.getPossibleHouses()
 
     "*** YOUR CODE HERE ***"
-    util.raiseNotDefined()
+    bottomLeftPos, topLeftPos, bottomRightPos, topRightPos = gameState.getPossibleHouses()
+
+    posToHouseVal = {
+        bottomLeftPos: BOTTOM_LEFT_VAL,
+        topLeftPos: TOP_LEFT_VAL,
+        bottomRightPos: BOTTOM_RIGHT_VAL,
+        topRightPos: TOP_RIGHT_VAL,
+    }
+
+    for housePos in gameState.getPossibleHouses():
+        houseVal = posToHouseVal[housePos]
+        for obsPos in gameState.getHouseWalls(housePos):
+            obsVar = OBS_VAR_TEMPLATE % obsPos
+            obsFactor = bn.Factor([obsVar], HOUSE_VARS, bayesNet.variableDomainsDict())
+
+            for assignment in obsFactor.getAllPossibleAssignmentDicts():
+                foodHouseVal = assignment[FOOD_HOUSE_VAR]
+                ghostHouseVal = assignment[GHOST_HOUSE_VAR]
+                obsVal = assignment[obsVar]
+
+                # If neither house is adjacent to this observation position, we see "none" with prob 1.
+                if foodHouseVal != houseVal and ghostHouseVal != houseVal:
+                    prob = 1.0 if obsVal == NO_OBS_VAL else 0.0
+                else:
+                    # At least one house is the adjacent house. If both are in same spot, use food distribution.
+                    if foodHouseVal == houseVal:
+                        redProb = PROB_FOOD_RED
+                    else:
+                        redProb = PROB_GHOST_RED
+
+                    if obsVal == RED_OBS_VAL:
+                        prob = redProb
+                    elif obsVal == BLUE_OBS_VAL:
+                        prob = 1.0 - redProb
+                    else:  # NO_OBS_VAL
+                        prob = 0.0
+
+                obsFactor.setProbability(assignment, prob)
+
+            bayesNet.setCPT(obsVar, obsFactor)
 
 def getMostLikelyFoodHousePosition(evidence, bayesNet, eliminationOrder):
     """
@@ -237,7 +282,7 @@ def getMostLikelyFoodHousePosition(evidence, bayesNet, eliminationOrder):
     """
     "*** YOUR CODE HERE ***"
     # perform inference by variable elimination
-    foodHouseFactor = inferenceByVariableElimination(
+    foodHouseFactor = inference.inferenceByVariableElimination(
         bayesNet,
         [FOOD_HOUSE_VAR],  # query: food house
         evidence,
@@ -355,7 +400,23 @@ class VPIAgent(BayesAgent):
         rightExpectedValue = 0
 
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        houseJoint = inference.inferenceByVariableElimination(
+            self.bayesNet,
+            [FOOD_HOUSE_VAR, GHOST_HOUSE_VAR],
+            evidence,
+            eliminationOrder
+        )
+
+        # In this VPI setup, the left/right houses are the top-left/top-right houses.
+        assignment1 = dict(evidence)
+        assignment1.update({FOOD_HOUSE_VAR: TOP_LEFT_VAL, GHOST_HOUSE_VAR: TOP_RIGHT_VAL})
+        assignment2 = dict(evidence)
+        assignment2.update({FOOD_HOUSE_VAR: TOP_RIGHT_VAL, GHOST_HOUSE_VAR: TOP_LEFT_VAL})
+        p_foodLeft = houseJoint.getProbability(assignment1)
+        p_ghostLeft = houseJoint.getProbability(assignment2)
+
+        leftExpectedValue = p_foodLeft * WON_GAME_REWARD + p_ghostLeft * GHOST_COLLISION_REWARD
+        rightExpectedValue = p_ghostLeft * WON_GAME_REWARD + p_foodLeft * GHOST_COLLISION_REWARD
 
         return leftExpectedValue, rightExpectedValue
 
@@ -421,7 +482,9 @@ class VPIAgent(BayesAgent):
         expectedValue = 0
 
         "*** YOUR CODE HERE ***"
-        util.raiseNotDefined()
+        for prob, outcomeEvidence in self.getExplorationProbsAndOutcomes(evidence):
+            leftVal, rightVal = self.computeEnterValues(outcomeEvidence, enterEliminationOrder)
+            expectedValue += prob * max(leftVal, rightVal)
 
         return expectedValue
 
